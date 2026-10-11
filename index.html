@@ -1,0 +1,90 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Ферма</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#8fcf5a;font-family:sans-serif;color:#2b2b2b;user-select:none;-webkit-tap-highlight-color:transparent}
+#top{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#3b6e1f;color:#fff;font-size:15px}
+#xp{height:6px;background:#2a4f14}#xp i{display:block;height:100%;background:#ffd23f}
+#grid{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;padding:8px}
+.t{aspect-ratio:1;border-radius:6px;background:#a8743f;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:26px;line-height:1}
+.t.g{background:#6fb53a}.t.l{background:#7d8b70;opacity:.7}.t.r{outline:3px solid #ffd23f}
+.t small{font-size:9px;margin-top:2px}
+#order{margin:0 8px;padding:8px;background:#fff8dc;border-radius:8px;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+.tabs,.items{display:flex;gap:5px;padding:6px 8px;overflow-x:auto}
+button{border:0;border-radius:8px;padding:9px 11px;background:#3b6e1f;color:#fff;font-size:13px;white-space:nowrap}
+button.s{background:#e08a1e}button:disabled{opacity:.45}
+#log{padding:4px 10px;font-size:13px;min-height:24px}
+</style></head><body>
+<div id="top"></div><div id="xp"><i></i></div>
+<div id="grid"></div><div id="order"></div>
+<div class="tabs" id="tabs"></div><div class="items" id="items"></div><div id="log"></div>
+<script>
+// ===== ДАННЫЕ: сюда добавляем новое =====
+const CROPS={wheat:{n:'Пшеница',e:'🌾',cost:5,time:15,sell:10,lvl:1},
+ carrot:{n:'Морковь',e:'🥕',cost:10,time:40,sell:24,lvl:2},
+ corn:{n:'Кукуруза',e:'🌽',cost:20,time:90,sell:50,lvl:3},
+ pumpkin:{n:'Тыква',e:'🎃',cost:40,time:180,sell:110,lvl:5}};
+const ANIMALS={chicken:{n:'Курица',e:'🐔',p:'🥚',cost:100,time:60,sell:20,lvl:1},
+ sheep:{n:'Овца',e:'🐑',p:'🧶',cost:300,time:120,sell:55,lvl:3},
+ cow:{n:'Корова',e:'🐄',p:'🥛',cost:600,time:180,sell:90,lvl:4},
+ pig:{n:'Свинья',e:'🐖',p:'🥓',cost:1000,time:300,sell:160,lvl:6}};
+const DECOR={tree:{n:'Дерево',e:'🌳',cost:50,lvl:1},flower:{n:'Цветы',e:'🌸',cost:20,lvl:1},
+ fence:{n:'Забор',e:'🪵',cost:10,lvl:1},well:{n:'Колодец',e:'⛲',cost:300,lvl:2}};
+const CATS={crop:CROPS,animal:ANIMALS,decor:DECOR};
+const CAT_NAMES={crop:'🌱 Растения',animal:'🐾 Животные',decor:'🌳 Декор',shovel:'🪓 Убрать'};
+const SIZE=36;
+// ===== СОСТОЯНИЕ =====
+const fresh=()=>({coins:60,xp:0,lvl:1,open:9,tiles:Array(SIZE).fill(null),inv:{},order:null});
+let S;try{S=JSON.parse(localStorage.getItem('farm')||'null')}catch(e){}S=S||fresh();
+let cat='crop',pick='wheat';
+const $=id=>document.getElementById(id), say=t=>$('log').textContent=t;
+const save=()=>{try{localStorage.setItem('farm',JSON.stringify(S))}catch(e){}};
+const info=(c,k)=>CATS[c][k];
+const need=()=>S.lvl*30;
+const prodEmoji=k=>CROPS[k]?CROPS[k].e:ANIMALS[k].p;
+const prodSell=k=>CROPS[k]?CROPS[k].sell:ANIMALS[k].sell;
+function addXp(n){S.xp+=n;while(S.xp>=need()){S.xp-=need();S.lvl++;say('🎉 Новый уровень: '+S.lvl+'!')}}
+function expandCost(){return 20*Math.pow(S.open-6,2)}
+// ===== ДЕЙСТВИЯ =====
+function tap(i){
+ if(i>=S.open){ if(i!==S.open)return say('Сначала расширь соседний участок');
+  const c=expandCost(); if(S.coins<c)return say('Нужно '+c+' монет'); S.coins-=c;S.open++;return draw();}
+ const t=S.tiles[i];
+ if(!t){ if(cat==='shovel')return; const d=info(cat,pick);
+  if(S.lvl<d.lvl)return say('Откроется на уровне '+d.lvl); if(S.coins<d.cost)return say('Не хватает монет');
+  S.coins-=d.cost;S.tiles[i]={c:cat,k:pick,at:Date.now()}; if(cat==='decor')addXp(1);}
+ else if(cat==='shovel'){S.tiles[i]=null}
+ else if(ready(t)){ S.inv[t.k]=(S.inv[t.k]||0)+1; addXp(t.c==='crop'?2:4);
+  if(t.c==='crop')S.tiles[i]=null; else t.at=Date.now();}
+ draw();}
+function ready(t){return t.c!=='decor'&&Date.now()-t.at>=info(t.c,t.k).time*1000}
+function sellAll(){let g=0;for(const k in S.inv){g+=S.inv[k]*prodSell(k)}S.inv={};S.coins+=g;say('Продано на '+g+' 💰');draw()}
+function newOrder(){const ks=Object.keys(CROPS).filter(k=>CROPS[k].lvl<=S.lvl);const k=ks[Math.floor(Math.random()*ks.length)];
+ const n=3+Math.floor(Math.random()*5);S.order={k,n,r:Math.round(n*CROPS[k].sell*1.6)}}
+function doOrder(){const o=S.order;if((S.inv[o.k]||0)<o.n)return;S.inv[o.k]-=o.n;S.coins+=o.r;addXp(o.n);say('Заказ выполнен: +'+o.r+' 💰');newOrder();draw()}
+// ===== ОТРИСОВКА =====
+function draw(){
+ const inv=Object.keys(S.inv).filter(k=>S.inv[k]>0).map(k=>prodEmoji(k)+S.inv[k]).join(' ')||'амбар пуст';
+ $('top').innerHTML=`<span>💰 ${S.coins} &nbsp; ⭐ ур.${S.lvl}</span><span>${inv}</span><button onclick="sellAll()">Продать</button>`;
+ $('xp').firstChild.style.width=(S.xp/need()*100)+'%';
+ $('grid').innerHTML=S.tiles.map((t,i)=>{
+  if(i>=S.open)return `<div class="t l" onclick="tap(${i})">${i===S.open?'🔒<small>'+expandCost()+'</small>':''}</div>`;
+  if(!t)return `<div class="t g" onclick="tap(${i})"></div>`;
+  if(t.c==='decor')return `<div class="t g" onclick="tap(${i})">${DECOR[t.k].e}</div>`;
+  const d=info(t.c,t.k),left=Math.ceil(d.time-(Date.now()-t.at)/1000),r=left<=0;
+  const face=t.c==='crop'?(r?d.e:'🌱'):d.e;
+  return `<div class="t ${t.c==='crop'?'':'g'} ${r?'r':''}" onclick="tap(${i})">${face}<small>${r?(t.c==='crop'?'собрать':d.p):left+'с'}</small></div>`}).join('');
+ const o=S.order;
+ $('order').innerHTML=`<span>📦 Заказ: ${prodEmoji(o.k)} ×${o.n} (есть ${S.inv[o.k]||0}) → ${o.r} 💰</span><button onclick="doOrder()" ${(S.inv[o.k]||0)<o.n?'disabled':''}>Сдать</button>`;
+ $('tabs').innerHTML=Object.keys(CAT_NAMES).map(c=>`<button class="${c===cat?'s':''}" onclick="cat='${c}';pick=Object.keys(CATS[c]||{})[0];draw()">${CAT_NAMES[c]}</button>`).join('');
+ $('items').innerHTML=cat==='shovel'?'<span>Нажми на объект, чтобы убрать</span>':Object.keys(CATS[cat]).map(k=>{const d=CATS[cat][k],lock=S.lvl<d.lvl;
+  return `<button class="${k===pick?'s':''}" ${lock?'disabled':''} onclick="pick='${k}';draw()">${d.e} ${d.n} ${lock?'(ур.'+d.lvl+')':d.cost}</button>`}).join('');
+}
+// ===== VK (необязательно) =====
+try{const s=document.createElement('script');s.src='https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js';
+ s.onload=()=>{try{vkBridge.send('VKWebAppInit')}catch(e){}};document.head.appendChild(s)}catch(e){}
+// ===== ЗАПУСК =====
+if(!S.order)newOrder();
+setInterval(()=>{draw();save()},1000);draw();
+</script></body></html>
